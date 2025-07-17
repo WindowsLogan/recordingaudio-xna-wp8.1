@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Windows Phone 8.1 Silverlight Audio Recording Guide</title>
+<style>
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen,
+      Ubuntu, Cantarell, "Open Sans", "Helvetica Neue", sans-serif;
+    max-width: 800px;
+    margin: 2rem auto;
+    padding: 1rem 2rem;
+    background: #f9f9f9;
+    color: #222;
+    line-height: 1.6;
+  }
+  h1, h2 {
+    color: #0078d7;
+  }
+  pre {
+    background: #272822;
+    color: #f8f8f2;
+    padding: 1rem;
+    overflow-x: auto;
+    border-radius: 5px;
+  }
+  code {
+    font-family: Consolas, monospace;
+    font-size: 0.9rem;
+  }
+  section {
+    margin-bottom: 2rem;
+  }
+  a {
+    color: #0078d7;
+    text-decoration: none;
+  }
+  a:hover {
+    text-decoration: underline;
+  }
+</style>
+</head>
+<body>
+
+<h1>Recording Audio on Windows Phone 8.1 Silverlight</h1>
+
+<section>
+  <h2>Overview</h2>
+  <p>
+    To record audio reliably in a Windows Phone 8.1 Silverlight app, use the
+    <code>Microphone</code> class from the
+    <code>Microsoft.Xna.Framework.Audio</code> namespace (XNA framework).
+  </p>
+  <p>
+    The process captures raw PCM audio data, which can be saved as a standard
+    WAV file with a proper header.
+  </p>
+</section>
+
+<section>
+  <h2>1. Setup and Start Recording</h2>
+  <p>Initialize microphone, buffer, and start capturing audio:</p>
+  <pre><code>Microphone microphone = Microphone.Default;
+byte[] micBuffer;
+MemoryStream pcmStream = new MemoryStream();
+DispatcherTimer micUpdateTimer;
+
+void StartRecording()
+{
+    microphone.BufferDuration = TimeSpan.FromMilliseconds(100);
+    micBuffer = new byte[microphone.GetSampleSizeInBytes(microphone.BufferDuration)];
+    pcmStream.SetLength(0);
+
+    microphone.BufferReady += Microphone_BufferReady;
+    microphone.Start();
+
+    micUpdateTimer = new DispatcherTimer();
+    micUpdateTimer.Interval = TimeSpan.FromMilliseconds(33);
+    micUpdateTimer.Tick += (s, e) =&gt; FrameworkDispatcher.Update();
+    micUpdateTimer.Start();
+}</code></pre>
+</section>
+
+<section>
+  <h2>2. Handling BufferReady Event</h2>
+  <p>Append microphone data to the memory stream on every buffer ready event:</p>
+  <pre><code>void Microphone_BufferReady(object sender, EventArgs e)
+{
+    int bytes = microphone.GetData(micBuffer);
+    pcmStream.Write(micBuffer, 0, bytes);
+}</code></pre>
+</section>
+
+<section>
+  <h2>3. Stop Recording and Get PCM Data</h2>
+  <p>Stop microphone, stop timer, and extract the raw PCM data:</p>
+  <pre><code>void StopRecording()
+{
+    microphone.Stop();
+    micUpdateTimer.Stop();
+    FrameworkDispatcher.Update();
+
+    byte[] pcmData = pcmStream.ToArray();
+    SaveWavFile(pcmData);
+}</code></pre>
+</section>
+
+<section>
+  <h2>4. Saving Raw PCM Data as a WAV File</h2>
+  <p>Wrap raw PCM data in a WAV header and save to isolated storage:</p>
+  <pre><code>void SaveWavFile(byte[] pcmData)
+{
+    string fileName = "recorded.wav";
+    int sampleRate = Microphone.Default.SampleRate;
+    short bitsPerSample = 16;
+    short channels = 1;
+
+    using (IsolatedStorageFile isoStore = IsolatedStorageFile.GetUserStoreForApplication())
+    {
+        using (IsolatedStorageFileStream stream = new IsolatedStorageFileStream(fileName, FileMode.Create, isoStore))
+        using (BinaryWriter writer = new BinaryWriter(stream))
+        {
+            int byteRate = sampleRate * channels * (bitsPerSample / 8);
+            short blockAlign = (short)(channels * (bitsPerSample / 8));
+            int subChunk2Size = pcmData.Length;
+            int chunkSize = 36 + subChunk2Size;
+
+            writer.Write(Encoding.ASCII.GetBytes("RIFF"));
+            writer.Write(chunkSize);
+            writer.Write(Encoding.ASCII.GetBytes("WAVE"));
+
+            writer.Write(Encoding.ASCII.GetBytes("fmt "));
+            writer.Write(16);
+            writer.Write((short)1);
+            writer.Write(channels);
+            writer.Write(sampleRate);
+            writer.Write(byteRate);
+            writer.Write(blockAlign);
+            writer.Write(bitsPerSample);
+
+            writer.Write(Encoding.ASCII.GetBytes("data"));
+            writer.Write(subChunk2Size);
+            writer.Write(pcmData);
+        }
+    }
+}</code></pre>
+</section>
+
+<section>
+  <h2>5. Additional Notes</h2>
+  <ul>
+    <li>
+      Remember to add <code>ID_CAP_MICROPHONE</code> capability in
+      <code>WMAppManifest.xml</code>.
+    </li>
+    <li>This records mono 16-bit PCM audio at typically 16 kHz sample rate.</li>
+    <li>You can play back the saved WAV using a <code>MediaElement</code>.</li>
+  </ul>
+</section>
+
+<section>
+  <h2>Useful Links</h2>
+  <ul>
+    <li>
+      <a href="https://docs.microsoft.com/en-us/previous-versions/windows/apps/jj206979(v=vs.105)">
+        Microphone Class (XNA Framework)
+      </a>
+    </li>
+    <li>
+      <a href="https://docs.microsoft.com/en-us/previous-versions/windows/apps/hh202942(v=vs.105)">
+        Saving and Playing Audio in Windows Phone
+      </a>
+    </li>
+  </ul>
+</section>
+
+<footer>
+  <p>© 2025 Your Name</p>
+</footer>
+
+</body>
+</html>
